@@ -1,0 +1,31 @@
+{
+  "league_name": "Test5",
+  "players": [
+    197619905686667265
+  ],
+  "weeks": {
+    "1": {
+      "games": {
+        "1": {
+          "197619905686667265": {
+            "placement": 1,
+            "points": 3
+          }
+        }
+      },
+      "finalized": true,
+      "num_games": 1,
+      "final_scores": {
+        "197619905686667265": 3
+      },
+      "allowances": {
+        "197619905686667265": {
+          "category": "win",
+          "card_limit": 1,
+          "price_limit": 5
+        }
+      },
+      "card_additions": {}
+    }
+  }
+}

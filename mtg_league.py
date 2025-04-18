@@ -151,7 +151,7 @@ async def list_commands(ctx):
         '!createleague "League Name" @p1 @p2 ...',
         '!loadleague "League Name"',
         '!addscores [num_games]',
-        '!viewscores',
+        '!viewleague',
         '!editscores <week> <game> <@user> <placement>',
         '!addcard',
         '!removecard',
@@ -299,26 +299,52 @@ async def on_reaction_add(reaction, user):
         if not wk.get('finalized') and len(wk['games']) == wk.get('num_games', 0):
             await finalize_week_procedures(reaction.message.channel, week)
 
-@bot.command(name='viewscores')
-async def view_scores(ctx):
+@bot.command(name='viewleague')
+async def view_league(ctx):
     if data_file is None:
         return await clean_send(ctx.channel,
                                  title='Error',
                                  description='No league loaded.')
-    totals = {}
-    for wk in data['weeks'].values():
-        for gm in wk['games'].values():
-            for pid, rec in gm.items():
-                totals[pid] = totals.get(pid, 0) + rec['points']
-    if not totals:
-        return await clean_send(ctx.channel,
-                                 title='No Data',
-                                 description='No scores recorded yet.')
-    lines = "\n".join(
-        f"{ctx.guild.get_member(int(pid)).display_name}: **{pts} pts**"
-        for pid, pts in sorted(totals.items(), key=lambda x: -x[1])
-    )
-    await clean_send(ctx.channel, title='🏆 Leaderboard', description=lines)
+
+    # Build the embed
+    embed = make_embed('League Summary')
+
+    # For each player in the league
+    for pid in data['players']:
+        member = ctx.guild.get_member(pid)
+        pid_str = str(pid)
+
+        # Compute total points across all weeks
+        total_points = 0
+        for wk_data in data['weeks'].values():
+            total_points += wk_data.get('final_scores', {}).get(pid_str, 0)
+
+        # Build per-week breakdown
+        lines = [f"🏆 **Total:** {total_points} pts"]
+        for week in sorted(data['weeks'], key=lambda x: int(x)):
+            wk_data = data['weeks'][week]
+            # Points this week
+            pts = wk_data.get('final_scores', {}).get(pid_str, 0)
+            # Allowance info
+            allow = wk_data.get('allowances', {}).get(pid_str, {})
+            cat = allow.get('category', 'N/A').title()
+            c_lim = allow.get('card_limit', 'N/A')
+            p_lim = allow.get('price_limit', 'N/A')
+            # Cards added this week
+            cards = wk_data.get('card_additions', {}).get(pid_str, [])
+            cards_str = ", ".join(cards) if cards else "None"
+            lines.append(
+                f"• Week {week}: {pts} pts — {cat} ({c_lim} cards / ${p_lim}) — Cards: {cards_str}"
+            )
+
+        # Add a field for this player
+        embed.add_field(
+            name=member.display_name,
+            value="\n".join(lines),
+            inline=False
+        )
+
+    await ctx.send(embed=embed)
 
 @bot.command(name='editscores')
 async def edit_scores(ctx, week: int, game: int, member: discord.Member, placement: int):
@@ -417,6 +443,12 @@ async def add_card(ctx):
                                  description='Allowance exceeded for the season.')
     with open(card_csv, 'a', newline='') as f:
         csv.writer(f).writerow([wk, pid, choice['name'], tcg, f"{price:.2f}"])
+           
+    wk_data = data['weeks'][wk]        
+    wk_data.setdefault('card_additions', {})\
+           .setdefault(pid, [])\
+           .append(f"{choice['name']} (${price:.2f})")
+    save_data()
     await clean_send(ctx.channel,
                      title='Card Added',
                      description=f"Added {choice['name']} — ${price:.2f}")
